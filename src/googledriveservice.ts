@@ -12,6 +12,7 @@ import * as querystring from 'querystring'
 export type WalkItem = {
   parent: GoogleDriveDir | undefined;
   nextPageToken: string | undefined;
+  retry: number;
 }
 export type FetchItemsResult = {
   files: GoogleDriveFile[],
@@ -19,7 +20,7 @@ export type FetchItemsResult = {
 }
 
 export default class GoogleDriveService {
-  protected static BATCH_SIZE = 10
+  protected static BATCH_SIZE = 100
   protected static SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
   drive: any
@@ -117,120 +118,137 @@ export default class GoogleDriveService {
     })
   }
 
-  async * walk (givenWalkItems: WalkItem[] = [{ parent: undefined, nextPageToken: undefined }]): any {
-    let remainingWalkItems = givenWalkItems
+  async * walk (givenWalkItems: WalkItem[] = [{ parent: undefined, nextPageToken: undefined, retry: 0 }]): any {
+    const remainingWalkItems = givenWalkItems.slice()
     const uniqueNames = {}
 
     while (remainingWalkItems.length) {
-      const batchItems = remainingWalkItems.slice(0, GoogleDriveService.BATCH_SIZE)
-      remainingWalkItems = remainingWalkItems.slice(GoogleDriveService.BATCH_SIZE)
+      const batchItems: WalkItem[] = remainingWalkItems.splice(0, GoogleDriveService.BATCH_SIZE)
 
-      const result = await this.fetchItems(batchItems, uniqueNames)
+      const hasRetryItems = batchItems.findIndex(x => x.retry > 0) >= 0
+      const result = await this.fetchItems(batchItems, uniqueNames, hasRetryItems ? 1000 : 0)
 
       for (const file of result.files) {
         yield file
       }
-      remainingWalkItems.push(...result.walkItems)
+
+      remainingWalkItems.unshift(...result.walkItems)
     }
+
+    console.log('done!')
   }
 
-  protected fetchItems (batchItems: WalkItem[], uniqueNames: any): Promise<FetchItemsResult> {
+  protected fetchItems (batchItems: WalkItem[], uniqueNames: any, delay = 0): Promise<FetchItemsResult> {
     return new Promise((resolve, reject) => {
-      const batch = new Batchelor({
-        uri: 'https://www.googleapis.com/batch',
-        method: 'POST',
-        auth: {
-          bearer: this.auth.credentials.access_token
-        },
-        headers: {
-          'Content-Type': 'multipart/mixed'
-        }
-      }).add(batchItems.map((batchItem: WalkItem) => {
-        const parentId = batchItem.parent ? batchItem.parent.id : 'root'
-        const q = `parents = "${parentId}" and trashed = false`
-        const fields = 'files(id, name, mimeType, md5Checksum, webViewLink, size), nextPageToken'
-        const orderBy = 'folder, name, modifiedTime'
-
-        let path = '/drive/v3/files'
-        path += `?q=${encodeURIComponent(q)}`
-        path += `&fields=${encodeURIComponent(fields)}`
-        path += `&orderBy=${encodeURIComponent(orderBy)}`
-        if (batchItem.nextPageToken) {
-          path += `&pageToken=${encodeURIComponent(batchItem.nextPageToken)}`
-        }
-
-        return {
-          method: 'GET',
-          path,
-          extend: {
-            parent: batchItem.parent,
-            nextPageToken: batchItem.nextPageToken
+      setTimeout(() => {
+        const batch = new Batchelor({
+          uri: 'https://www.googleapis.com/batch',
+          method: 'POST',
+          auth: {
+            bearer: this.auth.credentials.access_token
+          },
+          headers: {
+            'Content-Type': 'multipart/mixed'
           }
-        }
-      }))
+        }).add(batchItems.map((batchItem: WalkItem) => {
+          const parentId = batchItem.parent ? batchItem.parent.id : 'root'
+          const q = `parents = "${parentId}" and trashed = false`
+          const fields = 'files(id, name, mimeType, md5Checksum, webViewLink, size), nextPageToken'
+          const orderBy = 'folder, name, modifiedTime'
 
-      batch.run((err: Error | undefined, response: any, extendObjects: { parent: GoogleDriveDir | undefined, nextPageToken: string | undefined }[]) => {
-        batch.reset()
-
-        if (err) {
-          reject(err)
-          return
-        }
-        if (response.body && response.body.error) {
-          reject(new Error(`${response.body.error.code} ${response.body.error.message}`))
-          return
-        }
-
-        const files: GoogleDriveFile[] = []
-        const walkItems: WalkItem[] = []
-
-        for (const result of response.parts) {
-          const extendObject = extendObjects[result.headers['Content-ID']]
-          const parent = extendObject ? extendObject.parent : undefined
-          const parentNextPageToken = extendObject ? extendObject.nextPageToken : undefined
-
-          if (result.body.nextPageToken) {
-            walkItems.push({
-              parent: parent,
-              nextPageToken: result.body.nextPageToken
-            })
+          let path = '/drive/v3/files'
+          path += `?q=${encodeURIComponent(q)}`
+          path += `&fields=${encodeURIComponent(fields)}`
+          path += `&orderBy=${encodeURIComponent(orderBy)}`
+          if (batchItem.nextPageToken) {
+            path += `&pageToken=${encodeURIComponent(batchItem.nextPageToken)}`
           }
 
-          if (result.body.files) {
-            for (const driveItem of result.body.files) {
-              if (GoogleDriveDir.isDir(driveItem)) {
-                const driveDir = new GoogleDriveDir(this.drive, parent, driveItem)
-                if (!(driveDir.path in uniqueNames)) {
-                  uniqueNames[driveDir.path] = 0
-                } else {
-                  ++uniqueNames[driveDir.path]
-                }
-                driveDir.uniqueNameIndex = uniqueNames[driveDir.path]
+          return {
+            method: 'GET',
+            path,
+            extend: {
+              walkItem: batchItem
+            }
+          }
+        }))
 
-                walkItems.push({
-                  parent: driveDir,
-                  nextPageToken: undefined
-                })
-              } else {
-                const driveFile = new GoogleDriveFile(this.drive, parent, driveItem)
-                if (!(driveFile.path in uniqueNames)) {
-                  uniqueNames[driveFile.path] = 0
-                } else {
-                  ++uniqueNames[driveFile.path]
-                }
-                driveFile.uniqueNameIndex = uniqueNames[driveFile.path]
+        batch.run((err: Error | undefined, response: any, extendObjects: { walkItem: WalkItem }[]) => {
+          batch.reset()
 
-                files.push(driveFile)
+          if (err) {
+            reject(err)
+            return
+          }
+
+          const files: GoogleDriveFile[] = []
+          const walkItems: WalkItem[] = []
+
+          for (const result of response.parts) {
+            const parentWalkItem = extendObjects[result.headers['Content-ID']].walkItem
+
+            if (result.body && result.body.error) {
+              switch (result.body.error.code) {
+                case 403:
+                case 429:
+                case 500:
+                  walkItems.push({
+                    parent: parentWalkItem.parent,
+                    nextPageToken: parentWalkItem.nextPageToken,
+                    retry: parentWalkItem.retry + 1
+                  })
+                  continue
+                default:
+                  reject(new Error(`${result.body.error.code} ${result.body.error.message}`))
+                  return
+              }
+            }
+
+            if (result.body.nextPageToken) {
+              walkItems.push({
+                parent: parentWalkItem.parent,
+                nextPageToken: result.body.nextPageToken,
+                retry: 0
+              })
+            }
+
+            if (result.body.files) {
+              for (const driveItem of result.body.files) {
+                if (GoogleDriveDir.isDir(driveItem)) {
+                  const driveDir = new GoogleDriveDir(this.drive, parentWalkItem.parent, driveItem)
+                  if (!(driveDir.path in uniqueNames)) {
+                    uniqueNames[driveDir.path] = 0
+                  } else {
+                    ++uniqueNames[driveDir.path]
+                  }
+                  driveDir.uniqueNameIndex = uniqueNames[driveDir.path]
+
+                  walkItems.push({
+                    parent: driveDir,
+                    nextPageToken: undefined,
+                    retry: 0
+                  })
+                } else {
+                  const driveFile = new GoogleDriveFile(this.drive, parentWalkItem.parent, driveItem)
+                  if (!(driveFile.path in uniqueNames)) {
+                    uniqueNames[driveFile.path] = 0
+                  } else {
+                    ++uniqueNames[driveFile.path]
+                  }
+                  driveFile.uniqueNameIndex = uniqueNames[driveFile.path]
+
+                  files.push(driveFile)
+                }
               }
             }
           }
-        }
 
-        resolve({
-          files,
-          walkItems
+          resolve({
+            files,
+            walkItems
+          })
         })
-      })
+      }, delay)
     })
   }
 }
