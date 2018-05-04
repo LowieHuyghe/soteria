@@ -26,3 +26,6 @@ yarn-error.log*
 # secrets
 googleapi.clientsecret.json
 googleapi.credentials.json
+
+# cache
+*cache.json

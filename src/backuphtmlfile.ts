@@ -1,9 +1,10 @@
 import BackupFile from './backupfile'
 import * as mkdirp from 'mkdirp'
 import * as fs from 'fs'
+import GoogleDriveService from './googledriveservice'
 
 export default class BackupHtmlFile extends BackupFile {
-  async save (progressCallback: (progress: number, done: boolean) => void): Promise<void> {
+  async save (service: GoogleDriveService, progressCallback: (progress: number, done: boolean) => void): Promise<void> {
     // Make directory structure
     if (!fs.existsSync(this.outputDirPath)) {
       mkdirp.sync(this.outputDirPath)
@@ -21,7 +22,7 @@ export default class BackupHtmlFile extends BackupFile {
         </script>
     </head>
     <body>
-        <!-- md5: ${this.driveFileMd5} -->
+        <!-- modifiedTime: ${this.driveFileModifiedTime} -->
         If you are not redirected automatically, follow this <a href='${this.driveFileLink}'>link to ${this.driveFileName}</a>.
     </body>
 </html>`

@@ -153,7 +153,7 @@ export default class GoogleDriveService {
         }).add(batchItems.map((batchItem: WalkItem) => {
           const parentId = batchItem.parent ? batchItem.parent.id : 'root'
           const q = `parents = "${parentId}" and trashed = false`
-          const fields = 'files(id, name, mimeType, md5Checksum, webViewLink, size), nextPageToken'
+          const fields = 'files(id, name, mimeType, md5Checksum, webViewLink, size, modifiedTime), nextPageToken'
           const orderBy = 'folder, name, modifiedTime'
 
           let path = '/drive/v3/files'
@@ -192,6 +192,7 @@ export default class GoogleDriveService {
                 case 403:
                 case 429:
                 case 500:
+                case 503:
                   walkItems.push({
                     parent: parentWalkItem.parent,
                     nextPageToken: parentWalkItem.nextPageToken,
@@ -215,7 +216,7 @@ export default class GoogleDriveService {
             if (result.body.files) {
               for (const driveItem of result.body.files) {
                 if (GoogleDriveDir.isDir(driveItem)) {
-                  const driveDir = new GoogleDriveDir(this.drive, parentWalkItem.parent, driveItem)
+                  const driveDir = new GoogleDriveDir(parentWalkItem.parent, driveItem)
                   if (!(driveDir.path in uniqueNames)) {
                     uniqueNames[driveDir.path] = 0
                   } else {
@@ -229,7 +230,7 @@ export default class GoogleDriveService {
                     retry: 0
                   })
                 } else {
-                  const driveFile = new GoogleDriveFile(this.drive, parentWalkItem.parent, driveItem)
+                  const driveFile = new GoogleDriveFile(parentWalkItem.parent, driveItem)
                   if (!(driveFile.path in uniqueNames)) {
                     uniqueNames[driveFile.path] = 0
                   } else {

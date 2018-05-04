@@ -67,10 +67,6 @@ export default class GoogleDriveFile extends GoogleDriveItem {
     'application/vnd.google-apps.site'
   ]
 
-  constructor (service: any, parent: GoogleDriveDir, driveItem: any) {
-    super(service, parent, driveItem)
-  }
-
   get md5 (): string {
     return this.driveItem.md5Checksum
   }
@@ -83,45 +79,68 @@ export default class GoogleDriveFile extends GoogleDriveItem {
     return this.driveItem.size
   }
 
+  get modifiedTime (): number | undefined {
+    if (!this.driveItem.modifiedTime) {
+      return undefined
+    }
+    return new Date(this.driveItem.modifiedTime).getTime()
+  }
+
   protected get htmlName (): string {
     return `${this.name}.html`
   }
 
   protected get htmlPath (): string {
-    if (!this.parent) {
-      return this.htmlName
-    }
-    return path.join(this.parent.path, this.htmlName)
+    return path.join(this.parentPath, this.htmlName)
   }
 
   get isSupported (): boolean {
-    return !(this.mimeType in GoogleDriveFile.unsupportedMimeTypes)
+    return !GoogleDriveFile.unsupportedMimeTypes.includes(this.mimeType)
   }
 
   get isGoogleFile (): boolean {
     return this.mimeType in GoogleDriveFile.supportedMimeTypes
   }
 
+  static fromJson (jsonString: string): GoogleDriveFile {
+    const json = JSON.parse(jsonString)
+
+    const instance = new GoogleDriveFile(undefined, json.driveItem)
+    instance.parentPath = json.parentPath
+    instance.uniqueNameIndex = json.uniqueNameIndex
+
+    return instance
+  }
+
   protected static getExportBakFile (path: string, extension: string): string {
     return `${path}.bak${extension}`
+  }
+
+  toJson (): string {
+    return JSON.stringify(this)
   }
 
   getNeedsToBackup (outputDir: string): boolean {
     if (!this.isSupported) {
       return false
     }
-    if (!this.md5) {
-      return true
-    }
 
     const outputPath = path.join(outputDir, this.path)
 
     if (!this.isGoogleFile) {
+      if (!this.md5) {
+        return true
+      }
+
       if (!fs.existsSync(outputPath)) {
         return true
       }
       const outputPathMd5: string = md5File.sync(outputPath)
       return this.md5 !== outputPathMd5
+    }
+
+    if (!this.modifiedTime) {
+      return true
     }
 
     const outputHtmlPath = path.join(outputDir, this.htmlPath)
@@ -138,8 +157,8 @@ export default class GoogleDriveFile extends GoogleDriveItem {
     }
 
     const outputHtmlContent = fs.readFileSync(outputHtmlPath, 'utf8')
-    const pattern = new RegExp(`md5\\s*[:=]\\s*${this.md5}`)
-    return pattern.test(outputHtmlContent)
+    const pattern = new RegExp(`modifiedTime\\s*[:=]\\s*${this.modifiedTime}`)
+    return !pattern.test(outputHtmlContent)
   }
 
   getFilesToBackup (outputDir: string): BackupFile[] {
@@ -154,11 +173,11 @@ export default class GoogleDriveFile extends GoogleDriveItem {
 
     if (!this.isGoogleFile) {
       filesToBackup.push(new BackupFile(
-        this.service,
         this.id,
         this.md5,
         this.link,
         this.size,
+        this.modifiedTime,
         undefined,
         this.parentPath,
         this.path,
@@ -167,29 +186,15 @@ export default class GoogleDriveFile extends GoogleDriveItem {
         outputPath
       ))
     } else {
-      filesToBackup.push(new BackupHtmlFile(
-        this.service,
-        this.id,
-        this.md5,
-        this.link,
-        this.size,
-        undefined,
-        this.parentPath,
-        this.htmlPath,
-        this.htmlName,
-        outputParentPath,
-        outputHtmlPath
-      ))
-
       for (const mimeExportType of GoogleDriveFile.supportedMimeTypes[this.mimeType]) {
         const mimeExportTypeExtension = GoogleDriveFile.mimeTypeExtensions[mimeExportType]
 
         filesToBackup.push(new BackupFile(
-          this.service,
           this.id,
           this.md5,
           this.link,
           this.size,
+          this.modifiedTime,
           mimeExportType,
           this.parentPath,
           GoogleDriveFile.getExportBakFile(this.path, mimeExportTypeExtension),
@@ -198,6 +203,21 @@ export default class GoogleDriveFile extends GoogleDriveItem {
           GoogleDriveFile.getExportBakFile(outputPath, mimeExportTypeExtension)
         ))
       }
+
+      // Html file last so the modifiedTIme is only updated after they are all done
+      filesToBackup.push(new BackupHtmlFile(
+        this.id,
+        this.md5,
+        this.link,
+        this.size,
+        this.modifiedTime,
+        undefined,
+        this.parentPath,
+        this.htmlPath,
+        this.htmlName,
+        outputParentPath,
+        outputHtmlPath
+      ))
 
       return filesToBackup
     }
