@@ -52,9 +52,13 @@ export default class BackupFile {
     progressCallback(0, false)
 
     return new Promise<void>((resolve, reject) => {
-      const responseCallback = (err: Error | undefined, response: any) => {
+      const responseCallback = (err: any | undefined, response: any) => {
         if (err) {
-          reject(err)
+          if (err.response) {
+            reject(new Error(`${err.response.status}: ${err.response.statusText}`))
+          } else {
+            reject(err)
+          }
           return
         }
 

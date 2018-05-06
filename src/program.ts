@@ -89,20 +89,27 @@ export default class Program {
           const driveFile: GoogleDriveFile = GoogleDriveFile.fromJson(line)
 
           if (!driveFile.getNeedsToBackup(outputDir)) {
-            process.stdout.write(`${files} - Skipped ${driveFile.path}\n`)
+            readline.clearLine(process.stdout, 0)
+            readline.cursorTo(process.stdout, 0)
+
+            process.stdout.write(`${files} - Skipped ${driveFile.path}`)
           } else {
             const filesToBackup = driveFile.getFilesToBackup(outputDir)
             for (const fileToBackup of filesToBackup) {
-              await fileToBackup.save(service, (progress: number, done: boolean) => {
+              try {
+                await fileToBackup.save(service, (progress: number, done: boolean) => {
+                  readline.clearLine(process.stdout, 0)
+                  readline.cursorTo(process.stdout, 0)
+
+                  const formattedProgress = Math.round(progress * 100 * 100) / 100
+                  process.stdout.write(`${files} - Downloading "${fileToBackup.driveFilePath}" - ${formattedProgress}%`)
+                })
+              } catch (err) {
                 readline.clearLine(process.stdout, 0)
                 readline.cursorTo(process.stdout, 0)
 
-                const formattedProgress = Math.round(progress * 100 * 100) / 100
-                process.stdout.write(`${files} - Downloading "${fileToBackup.driveFilePath}" - ${formattedProgress}%`)
-                if (done) {
-                  process.stdout.write('\n')
-                }
-              })
+                process.stdout.write(`${files} - Failed downloading ${fileToBackup.driveFilePath} - ${err.message}\n`)
+              }
             }
           }
 
