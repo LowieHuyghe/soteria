@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as mkdirp from 'mkdirp'
 import GoogleDriveService from './googledriveservice'
 
-export default class BackupFile {
+export default class GoogleBackupFile {
   public driveFileId: string
   public driveFileMd5: string | undefined
   public driveFileLink: string

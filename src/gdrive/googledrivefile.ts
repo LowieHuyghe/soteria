@@ -3,8 +3,8 @@ import GoogleDriveDir from './googledrivedir'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as md5File from 'md5-file'
-import BackupFile from './backupfile'
-import BackupHtmlFile from './backuphtmlfile'
+import GoogleBackupFile from './googlebackupfile'
+import GoogleBackupHtmlFile from './googlebackuphtmlfile'
 
 export default class GoogleDriveFile extends GoogleDriveItem {
   protected static supportedMimeTypes: { [s: string]: string[]; } = {
@@ -161,7 +161,7 @@ export default class GoogleDriveFile extends GoogleDriveItem {
     return !pattern.test(outputHtmlContent)
   }
 
-  getFilesToBackup (outputDir: string): BackupFile[] {
+  getFilesToBackup (outputDir: string): GoogleBackupFile[] {
     if (!this.isSupported) {
       return []
     }
@@ -169,10 +169,10 @@ export default class GoogleDriveFile extends GoogleDriveItem {
     const outputPath = path.join(outputDir, this.path)
     const outputHtmlPath = path.join(outputDir, this.htmlPath)
     const outputParentPath = path.join(outputDir, this.parentPath)
-    const filesToBackup: BackupFile[] = []
+    const filesToBackup: GoogleBackupFile[] = []
 
     if (!this.isGoogleFile) {
-      filesToBackup.push(new BackupFile(
+      filesToBackup.push(new GoogleBackupFile(
         this.id,
         this.md5,
         this.link,
@@ -189,7 +189,7 @@ export default class GoogleDriveFile extends GoogleDriveItem {
       for (const mimeExportType of GoogleDriveFile.supportedMimeTypes[this.mimeType]) {
         const mimeExportTypeExtension = GoogleDriveFile.mimeTypeExtensions[mimeExportType]
 
-        filesToBackup.push(new BackupFile(
+        filesToBackup.push(new GoogleBackupFile(
           this.id,
           this.md5,
           this.link,
@@ -205,7 +205,7 @@ export default class GoogleDriveFile extends GoogleDriveItem {
       }
 
       // Html file last so the modifiedTIme is only updated after they are all done
-      filesToBackup.push(new BackupHtmlFile(
+      filesToBackup.push(new GoogleBackupHtmlFile(
         this.id,
         this.md5,
         this.link,

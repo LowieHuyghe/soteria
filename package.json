@@ -8,7 +8,7 @@
     "src": "src"
   },
   "scripts": {
-    "start": "ts-node src/index.ts",
+    "start": "ts-node src/program.ts",
     "lint": "tslint -c tslint.json --exclude '**/*.d.ts' --exclude 'node_modules/**/*.ts' '**/*.ts'",
     "lint:watch": "nodemon --ext ts --exec npm run lint",
     "test": "NODE_ENV=testing mocha --opts mocha.opts '**/*.spec.ts'",

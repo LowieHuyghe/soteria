@@ -1,11 +1,11 @@
 import * as commander from 'commander'
-import GoogleDriveFile from './googledrivefile'
+import GoogleDriveFile from './gdrive/googledrivefile'
 import * as fs from 'fs'
 import * as readline from 'readline'
-import GDriveBackup from './gdrive/gdrivebackup'
-import BackupFile from './backupfile'
+import GoogleDriveBackup from './gdrive/googledrivebackup'
+import GoogleBackupFile from './gdrive/googlebackupfile'
 
-export default class Program {
+class Program {
   /**
    * Command
    */
@@ -43,7 +43,7 @@ export default class Program {
     const credentialsFile = 'googleapi.credentials.json'
     const cacheFile = 'gdrive.cache.json'
     const workerCount = 3
-    const backup = await GDriveBackup.create(clientSecretFile, credentialsFile, cacheFile, workerCount)
+    const backup = await GoogleDriveBackup.create(clientSecretFile, credentialsFile, cacheFile, workerCount)
 
     // SYNC
     if (!this.command.cached || !fs.existsSync(cacheFile)) {
@@ -71,12 +71,12 @@ export default class Program {
         this.printOutput(workerIndex, workerCount + 1, true, `Worker ${workerIndex + 1} - Skipped "${file.path}"`)
         this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
       },
-      (file: GoogleDriveFile, fileToBackup: BackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number) => {
+      (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number) => {
         const formattedProgress = Math.round(progress * 100 * 100) / 100
         this.printOutput(workerIndex, workerCount + 1, true, `Worker ${workerIndex + 1} - Downloading "${fileToBackup.driveFilePath}" - ${formattedProgress}%`)
         this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
       },
-      (file: GoogleDriveFile, fileToBackup: BackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number) => {
+      (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number) => {
         this.printOutput(workerIndex, workerCount + 1, false, `Failed to download "${fileToBackup.driveFilePath}" - ${error.message}`)
         this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
       }
@@ -110,3 +110,5 @@ export default class Program {
     }
   }
 }
+
+new Program(commander).run(process.argv)

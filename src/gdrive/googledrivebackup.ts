@@ -1,12 +1,12 @@
-import GoogleDriveService from '../googledriveservice'
+import GoogleDriveService from './googledriveservice'
 import * as fs from 'fs'
-import GoogleDriveFile from '../googledrivefile'
+import GoogleDriveFile from './googledrivefile'
 import SimpleLineReader from '../simplelinereader'
 import Downloader from '../downloader'
 import { isUndefined } from 'util'
-import BackupFile from '../backupfile'
+import GoogleBackupFile from './googlebackupfile'
 
-export default class GDriveBackup {
+export default class GoogleDriveBackup {
   private service: GoogleDriveService
   private cachePath: string
   private workerCount: number
@@ -17,9 +17,9 @@ export default class GDriveBackup {
     this.workerCount = workerCount
   }
 
-  static async create (clientSecretPath: string, credentialsPath: string, cachePath: string, workerCount: number): Promise<GDriveBackup> {
+  static async create (clientSecretPath: string, credentialsPath: string, cachePath: string, workerCount: number): Promise<GoogleDriveBackup> {
     const service = await GoogleDriveService.create(clientSecretPath, credentialsPath)
-    return new GDriveBackup(service, cachePath, workerCount)
+    return new GoogleDriveBackup(service, cachePath, workerCount)
   }
 
   async sync (progressCallback: (file: GoogleDriveFile, totalFiles: number) => void): Promise<number> {
@@ -46,8 +46,8 @@ export default class GDriveBackup {
   async download (
     outputDir: string,
     skipCallback: (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void,
-    progressCallback: (file: GoogleDriveFile, fileToBackup: BackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void,
-    errorCallback: (file: GoogleDriveFile, fileToBackup: BackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
+    progressCallback: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void,
+    errorCallback: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
   ) {
     const totalFiles: number = await SimpleLineReader.lineCount(this.cachePath)
     let processedFiles: number = 0

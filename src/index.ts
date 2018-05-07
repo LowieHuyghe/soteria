@@ -1,4 +1,2 @@
-import * as commander from 'commander'
-import Program from './program'
 
-new Program(commander).run(process.argv)
+export { default as GoogleDriveBackup } from './gdrive/googledrivebackup'
