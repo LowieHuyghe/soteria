@@ -1,9 +1,9 @@
-import BackupFile from './backupfile'
+import GoogleBackupFile from './googlebackupfile'
 import * as mkdirp from 'mkdirp'
 import * as fs from 'fs'
 import GoogleDriveService from './googledriveservice'
 
-export default class BackupHtmlFile extends BackupFile {
+export default class GoogleBackupHtmlFile extends GoogleBackupFile {
   async save (service: GoogleDriveService, progressCallback: (progress: number, done: boolean) => void): Promise<void> {
     // Make directory structure
     if (!fs.existsSync(this.outputDirPath)) {

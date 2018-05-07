@@ -1,17 +1,15 @@
 import * as commander from 'commander'
-import GoogleDriveService from './googledriveservice'
-import GoogleDriveFile from './googledrivefile'
+import GoogleDriveFile from './gdrive/googledrivefile'
 import * as fs from 'fs'
 import * as readline from 'readline'
-import * as lineReader from 'line-reader'
+import GoogleDriveBackup from './gdrive/googledrivebackup'
+import GoogleBackupFile from './gdrive/googlebackupfile'
 
-export default class Program {
+class Program {
   /**
    * Command
    */
   private command: commander.Command
-
-  private syncCache: string = 'sync.cache.json'
 
   /**
    * Constructor
@@ -41,76 +39,76 @@ export default class Program {
    * @param {string} outputDir
    */
   protected async action (outputDir: string) {
-    const service: GoogleDriveService = await GoogleDriveService.create('googleapi.clientsecret.json', 'googleapi.credentials.json')
+    const clientSecretFile = 'googleapi.clientsecret.json'
+    const credentialsFile = 'googleapi.credentials.json'
+    const cacheFile = 'gdrive.cache.json'
+    const workerCount = 3
+    const backup = await GoogleDriveBackup.create(clientSecretFile, credentialsFile, cacheFile, workerCount)
 
-    if (!this.command.cached || !fs.existsSync(this.syncCache)) {
-      await this.sync(service)
+    // SYNC
+    if (!this.command.cached || !fs.existsSync(cacheFile)) {
+      // Prepare for multi-line output
+      for (let i = 0; i < 1; ++i) {
+        process.stdout.write('\n')
+      }
+
+      await backup.sync((file: GoogleDriveFile, totalFiles: number) => {
+        this.printOutput(0, 2, true, `Found file "${file.path}"`)
+        this.printOutput(1, 2, true, `Total files: ${totalFiles}`)
+      })
     }
-    await this.download(service, outputDir)
+
+    // DOWNLOAD
+
+    // Prepare for multi-line output
+    for (let i = 0; i < workerCount; ++i) {
+      process.stdout.write('\n')
+    }
+
+    const totalFiles = await backup.download(
+      outputDir,
+      (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number) => {
+        this.printOutput(workerIndex, workerCount + 1, true, `Worker ${workerIndex + 1} - Skipped "${file.path}"`)
+        this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
+      },
+      (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number) => {
+        const formattedProgress = Math.round(progress * 100 * 100) / 100
+        this.printOutput(workerIndex, workerCount + 1, true, `Worker ${workerIndex + 1} - Downloading "${fileToBackup.driveFilePath}" - ${formattedProgress}%`)
+        this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
+      },
+      (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number) => {
+        this.printOutput(workerIndex, workerCount + 1, false, `Failed to download "${fileToBackup.driveFilePath}" - ${error.message}`)
+        this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
+      }
+    )
+
+    for (let i = 0; i < workerCount; ++i) {
+      this.printOutput(i, workerCount + 1, true, `Worker ${i + 1} - Done`)
+    }
+    this.printOutput(workerCount, workerCount + 1, true, `Processed ${totalFiles} files`)
   }
 
-  /**
-   * Sync your google drive
-   * @param {GoogleDriveService} service
-   * @returns {Promise<void>}
-   */
-  protected async sync (service: GoogleDriveService) {
-    let files: number = 0
+  protected printOutput(lineIndex: number, lineCount: number, overWritable: boolean, text: string) {
+    if (overWritable) {
+      readline.cursorTo(process.stdout, 0)
+      readline.moveCursor(process.stdout, 0, -(lineCount - 1 - lineIndex))
+      readline.clearLine(process.stdout, 0)
 
-    let cacheFile: fs.WriteStream
-    try {
-      cacheFile = fs.createWriteStream(this.syncCache, { encoding: 'utf8' })
+      process.stdout.write(text)
 
-      for await (const file of service.walk()) {
-        console.log(files, 'Found file!', file.path)
-        cacheFile.write(`${file.toJson()}\n`)
-        ++files
-      }
-    } finally {
-      if (cacheFile) {
-        cacheFile.close()
-      }
+      readline.cursorTo(process.stdout, 0)
+      readline.moveCursor(process.stdout, 0, lineCount - 1 - lineIndex)
+    } else {
+      readline.cursorTo(process.stdout, 0)
+      readline.moveCursor(process.stdout, 0, -(lineCount - 1))
+      readline.clearLine(process.stdout, 0)
+
+      process.stdout.write(text)
+
+      readline.moveCursor(process.stdout, 0, lineCount - 1)
+      process.stdout.write('\n')
     }
-  }
-
-  /**
-   * Download your google drive
-   * @param {GoogleDriveService} service
-   * @param {string} outputDir
-   * @returns {Promise<void>}
-   */
-  protected async download (service: GoogleDriveService, outputDir: string) {
-    return new Promise((resolve, reject) => {
-      let files: number = 0
-      try {
-        lineReader.eachLine(this.syncCache, async (line: string, last: boolean, cb: (done?: boolean) => void) => {
-          ++files
-
-          const driveFile: GoogleDriveFile = GoogleDriveFile.fromJson(line)
-
-          if (!driveFile.getNeedsToBackup(outputDir)) {
-            process.stdout.write(`${files} - Skipped ${driveFile.path}\n`)
-          } else {
-            const filesToBackup = driveFile.getFilesToBackup(outputDir)
-            for (const fileToBackup of filesToBackup) {
-              await fileToBackup.save(service, (progress: number, done: boolean) => {
-                readline.clearLine(process.stdout, 0)
-                readline.cursorTo(process.stdout, 0)
-
-                const formattedProgress = Math.round(progress * 100 * 100) / 100
-                process.stdout.write(`${files} - Downloading "${fileToBackup.driveFilePath}" - ${formattedProgress}%`)
-                if (done) {
-                  process.stdout.write('\n')
-                }
-              })
-            }
-          }
-
-          cb()
-        })
-      } catch (err) {
-        reject(err)
-      }
-    })
   }
 }
+
+new Program(commander).run(process.argv)

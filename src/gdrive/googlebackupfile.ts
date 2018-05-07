@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as mkdirp from 'mkdirp'
 import GoogleDriveService from './googledriveservice'
 
-export default class BackupFile {
+export default class GoogleBackupFile {
   public driveFileId: string
   public driveFileMd5: string | undefined
   public driveFileLink: string
@@ -52,9 +52,13 @@ export default class BackupFile {
     progressCallback(0, false)
 
     return new Promise<void>((resolve, reject) => {
-      const responseCallback = (err: Error | undefined, response: any) => {
+      const responseCallback = (err: any | undefined, response: any) => {
         if (err) {
-          reject(err)
+          if (err.response) {
+            reject(new Error(`${err.response.status}: ${err.response.statusText}`))
+          } else {
+            reject(err)
+          }
           return
         }
 
