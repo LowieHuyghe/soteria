@@ -5,11 +5,21 @@ import SimpleLineReader from '../simplelinereader'
 import Downloader from '../downloader'
 import { isUndefined } from 'util'
 import GoogleBackupFile from './googlebackupfile'
+import GoogleDriveDir from './googledrivedir'
 
 export default class GoogleDriveBackup {
   private service: GoogleDriveService
   private cachePath: string
   private workerCount: number
+  private onSectionSyncStartedListener: () => void
+  private onSectionSyncFinishedListener: (totalFiles: number) => void
+  private onSectionDownloadStartedListener: (totalFiles: number) => void
+  private onSectionDownloadFinishedListener: (processedFiles: number, totalFiles: number) => void
+  private onSyncFileFoundListener: (file: GoogleDriveFile, totalFiles: number) => void
+  private onDownloadSkipListener: (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
+  private onDownloadProgressListener: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
+  private onDownloadErrorListener: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
+  private onUnwantedGitRepoListener: (file: GoogleDriveFile) => void
 
   constructor (service: GoogleDriveService, cachePath: string, workerCount: number) {
     this.service = service
@@ -22,9 +32,64 @@ export default class GoogleDriveBackup {
     return new GoogleDriveBackup(service, cachePath, workerCount)
   }
 
-  async sync (progressCallback: (file: GoogleDriveFile, totalFiles: number) => void): Promise<number> {
+  onSectionSyncStarted (callback: () => void): GoogleDriveBackup {
+    this.onSectionSyncStartedListener = callback
+    return this
+  }
+
+  onSectionSyncFinished (callback: (totalFiles: number) => void): GoogleDriveBackup {
+    this.onSectionSyncFinishedListener = callback
+    return this
+  }
+
+  onSectionDownloadStarted (callback: (totalFiles: number) => void): GoogleDriveBackup {
+    this.onSectionDownloadStartedListener = callback
+    return this
+  }
+
+  onSectionDownloadFinished (callback: (processedFiles: number, totalFiles: number) => void): GoogleDriveBackup {
+    this.onSectionDownloadFinishedListener = callback
+    return this
+  }
+
+  onSyncFileFound (callback: (file: GoogleDriveFile, totalFiles: number) => void): GoogleDriveBackup {
+    this.onSyncFileFoundListener = callback
+    return this
+  }
+
+  onDownloadSkip (callback: (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void): GoogleDriveBackup {
+    this.onDownloadSkipListener = callback
+    return this
+  }
+
+  onDownloadProgress (callback: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void): GoogleDriveBackup {
+    this.onDownloadProgressListener = callback
+    return this
+  }
+
+  onDownloadError (callback: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void): GoogleDriveBackup {
+    this.onDownloadErrorListener = callback
+    return this
+  }
+
+  onUnwantedGitRepo (callback: (dir: GoogleDriveDir) => void): GoogleDriveBackup {
+    this.onUnwantedGitRepoListener = callback
+    return this
+  }
+
+  async start (outputDir: string, fromCacheIfAvailable: boolean = false): Promise<number> {
+    if (!fromCacheIfAvailable || !fs.existsSync(this.cachePath)) {
+      await this.sync()
+    }
+
+    return this.download(outputDir)
+  }
+
+  async sync (): Promise<number> {
     let cacheFile: fs.WriteStream
     try {
+      this.onSectionSyncStartedListener && this.onSectionSyncStartedListener()
+
       cacheFile = fs.createWriteStream(this.cachePath, { encoding: 'utf8' })
 
       let totalFiles: number = 0
@@ -32,8 +97,10 @@ export default class GoogleDriveBackup {
       for await (const file of this.service.walk()) {
         cacheFile.write(`${file.toJson()}\n`)
         ++totalFiles
-        progressCallback(file, totalFiles)
+        this.onSyncFileFoundListener && this.onSyncFileFoundListener(file, totalFiles)
       }
+
+      this.onSectionSyncFinishedListener && this.onSectionSyncFinishedListener(totalFiles)
 
       return totalFiles
     } finally {
@@ -43,14 +110,11 @@ export default class GoogleDriveBackup {
     }
   }
 
-  async download (
-    outputDir: string,
-    skipCallback: (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void,
-    progressCallback: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void,
-    errorCallback: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
-  ) {
+  async download (outputDir: string) {
     const totalFiles: number = await SimpleLineReader.lineCount(this.cachePath)
     let processedFiles: number = 0
+
+    this.onSectionDownloadStartedListener && this.onSectionDownloadStartedListener(totalFiles)
 
     const reader = await SimpleLineReader.open(this.cachePath)
 
@@ -68,20 +132,24 @@ export default class GoogleDriveBackup {
 
       const driveFile: GoogleDriveFile = GoogleDriveFile.fromJson(jsonString)
 
+      if (driveFile.path.endsWith('/.git/config')) {
+        this.onUnwantedGitRepoListener && this.onUnwantedGitRepoListener(driveFile)
+      }
+
       if (!driveFile.getNeedsToBackup(outputDir)) {
         // Skip
-        skipCallback(driveFile, processedFiles, totalFiles, workerIndex, this.workerCount)
+        this.onDownloadSkipListener && this.onDownloadSkipListener(driveFile, processedFiles, totalFiles, workerIndex, this.workerCount)
       } else {
         const filesToBackup = driveFile.getFilesToBackup(outputDir)
         for (const fileToBackup of filesToBackup) {
           try {
             // Download
             await fileToBackup.save(this.service, (progress: number, done: boolean) => {
-              progressCallback(driveFile, fileToBackup, progress, processedFiles, totalFiles, workerIndex, this.workerCount)
+              this.onDownloadProgressListener && this.onDownloadProgressListener(driveFile, fileToBackup, progress, processedFiles, totalFiles, workerIndex, this.workerCount)
             })
           } catch (err) {
             // Error
-            errorCallback(driveFile, fileToBackup, err, processedFiles, totalFiles, workerIndex, this.workerCount)
+            this.onDownloadErrorListener && this.onDownloadErrorListener(driveFile, fileToBackup, err, processedFiles, totalFiles, workerIndex, this.workerCount)
           }
         }
       }
@@ -90,6 +158,8 @@ export default class GoogleDriveBackup {
     }, this.workerCount)
 
     await downloader.start()
+
+    this.onSectionDownloadFinishedListener && this.onSectionDownloadFinishedListener(processedFiles, totalFiles)
 
     return totalFiles
   }
