@@ -132,7 +132,7 @@ export default class GoogleDriveBackup {
 
       const driveFile: GoogleDriveFile = GoogleDriveFile.fromJson(jsonString)
 
-      if (driveFile.path.endsWith('/.git/config')) {
+      if (driveFile.isUnwantedGitRepo && driveFile.name === 'config') {
         this.onUnwantedGitRepoListener && this.onUnwantedGitRepoListener(driveFile)
       }
 

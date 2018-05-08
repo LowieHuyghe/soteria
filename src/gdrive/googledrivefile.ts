@@ -5,6 +5,7 @@ import * as fs from 'fs'
 import * as md5File from 'md5-file'
 import GoogleBackupFile from './googlebackupfile'
 import GoogleBackupHtmlFile from './googlebackuphtmlfile'
+import GoogleBackupGitRepoFile from './googlebackupgitrepofile'
 
 export default class GoogleDriveFile extends GoogleDriveItem {
   protected static supportedMimeTypes: { [s: string]: string[]; } = {
@@ -102,6 +103,14 @@ export default class GoogleDriveFile extends GoogleDriveItem {
     return this.mimeType in GoogleDriveFile.supportedMimeTypes
   }
 
+  get isUnwantedGitRepo (): boolean {
+    return this.parentPath === '.git' || this.parentPath.endsWith(`${path.sep}.git`)
+  }
+
+  get isGitRepo (): boolean {
+    return this.name.endsWith('.git.json')
+  }
+
   static fromJson (jsonString: string): GoogleDriveFile {
     const json = JSON.parse(jsonString)
 
@@ -123,6 +132,9 @@ export default class GoogleDriveFile extends GoogleDriveItem {
   getNeedsToBackup (outputDir: string): boolean {
     if (!this.isSupported) {
       return false
+    }
+    if (this.isGitRepo) {
+      return true
     }
 
     const outputPath = path.join(outputDir, this.path)
@@ -171,21 +183,7 @@ export default class GoogleDriveFile extends GoogleDriveItem {
     const outputParentPath = path.join(outputDir, this.parentPath)
     const filesToBackup: GoogleBackupFile[] = []
 
-    if (!this.isGoogleFile) {
-      filesToBackup.push(new GoogleBackupFile(
-        this.id,
-        this.md5,
-        this.link,
-        this.size,
-        this.modifiedTime,
-        undefined,
-        this.parentPath,
-        this.path,
-        this.name,
-        outputParentPath,
-        outputPath
-      ))
-    } else {
+    if (this.isGoogleFile) {
       for (const mimeExportType of GoogleDriveFile.supportedMimeTypes[this.mimeType]) {
         const mimeExportTypeExtension = GoogleDriveFile.mimeTypeExtensions[mimeExportType]
 
@@ -218,8 +216,34 @@ export default class GoogleDriveFile extends GoogleDriveItem {
         outputParentPath,
         outputHtmlPath
       ))
-
-      return filesToBackup
+    } else if (this.isGitRepo) {
+      filesToBackup.push(new GoogleBackupGitRepoFile(
+        this.id,
+        this.md5,
+        this.link,
+        this.size,
+        this.modifiedTime,
+        undefined,
+        this.parentPath,
+        this.path,
+        this.name,
+        outputParentPath,
+        outputPath
+      ))
+    } else {
+      filesToBackup.push(new GoogleBackupFile(
+        this.id,
+        this.md5,
+        this.link,
+        this.size,
+        this.modifiedTime,
+        undefined,
+        this.parentPath,
+        this.path,
+        this.name,
+        outputParentPath,
+        outputPath
+      ))
     }
 
     return filesToBackup
