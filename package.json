@@ -35,7 +35,7 @@
     "batchelor": "^2.0.2",
     "commander": "^2.14.1",
     "config": "^1.29.4",
-    "googleapis": "^29.0.0",
+    "googleapis": "^30.0.0",
     "inquirer": "^5.1.0",
     "line-reader": "^0.4.0",
     "md5-file": "^4.0.0",
