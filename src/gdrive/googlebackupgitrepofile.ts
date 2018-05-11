@@ -39,7 +39,8 @@ export default class GoogleBackupGitRepoFile extends GoogleBackupFile {
       throw new Error(`"${repoDir}"-repo does not have a fetch-ref for remote-"origin"`)
     }
     if (remotes[0].refs.fetch !== remoteUrl) {
-      throw new Error(`"${repoDir}"-repo remote-"origin" fetch url does not match "${remoteUrl}"`)
+      await gitInstance.removeRemote('origin')
+      await gitInstance.addRemote('origin', remoteUrl)
     }
 
     await gitInstance.pull()
