@@ -51,7 +51,7 @@
     "@types/line-reader": "0.0.28",
     "@types/mkdirp": "^0.5.2",
     "@types/mocha": "^5.1.0",
-    "@types/node": "^10.0.4",
+    "@types/node": "^10.0.8",
     "@types/sanitize-filename": "^1.1.28",
     "chai": "^4.1.2",
     "codecov": "^3.0.2",
