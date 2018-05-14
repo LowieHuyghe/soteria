@@ -6,6 +6,7 @@ import Downloader from '../downloader'
 import { isUndefined } from 'util'
 import GoogleBackupFile from './googlebackupfile'
 import GoogleDriveDir from './googledrivedir'
+import GoogleBackupGitRepoFile from './googlebackupgitrepofile'
 
 export default class GoogleDriveBackup {
   private service: GoogleDriveService
@@ -16,6 +17,8 @@ export default class GoogleDriveBackup {
   private onSectionDownloadStartedListener: (totalFiles: number) => void
   private onSectionDownloadFinishedListener: (processedFiles: number, totalFiles: number) => void
   private onSyncFileFoundListener: (file: GoogleDriveFile, totalFiles: number) => void
+  private onPathInUseListener: (path: string) => void
+  private onDownloadStartedListener: (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
   private onDownloadSkipListener: (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
   private onDownloadProgressListener: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, progress: number, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
   private onDownloadErrorListener: (file: GoogleDriveFile, fileToBackup: GoogleBackupFile, error: Error, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void
@@ -57,8 +60,18 @@ export default class GoogleDriveBackup {
     return this
   }
 
+  onPathInUse (callback: (path: string) => void): GoogleDriveBackup {
+    this.onPathInUseListener = callback
+    return this
+  }
+
   onDownloadSkip (callback: (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void): GoogleDriveBackup {
     this.onDownloadSkipListener = callback
+    return this
+  }
+
+  onDownloadStarted (callback: (file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number, workerCount: number) => void): GoogleDriveBackup {
+    this.onDownloadStartedListener = callback
     return this
   }
 
@@ -128,9 +141,21 @@ export default class GoogleDriveBackup {
         return true
       }
 
-      ++processedFiles
-
       const driveFile: GoogleDriveFile = GoogleDriveFile.fromJson(jsonString)
+
+      this.onDownloadStartedListener && this.onDownloadStartedListener(driveFile, processedFiles, totalFiles, workerIndex, this.workerCount)
+
+      if (this.onPathInUseListener) {
+        const filesToBackup = driveFile.getFilesToBackup(outputDir)
+        for (const fileToBackup of filesToBackup) {
+          this.onPathInUseListener(fileToBackup.outputFilePath)
+          if (fileToBackup instanceof GoogleBackupGitRepoFile) {
+            this.onPathInUseListener(fileToBackup.repoDirPath)
+          }
+        }
+      }
+
+      ++processedFiles
 
       if (driveFile.isUnwantedGitRepo && driveFile.name === 'config') {
         this.onUnwantedGitRepoListener && this.onUnwantedGitRepoListener(driveFile)

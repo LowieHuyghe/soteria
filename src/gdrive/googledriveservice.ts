@@ -134,8 +134,6 @@ export default class GoogleDriveService {
 
       remainingWalkItems.unshift(...result.walkItems)
     }
-
-    console.log('done!')
   }
 
   protected fetchItems (batchItems: WalkItem[], uniqueNames: any, delay = 0): Promise<FetchItemsResult> {

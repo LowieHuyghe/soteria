@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import * as readline from 'readline'
 import GoogleDriveBackup from './gdrive/googledrivebackup'
 import GoogleBackupFile from './gdrive/googlebackupfile'
+import Cleaner from './cleaner'
 
 class Program {
   /**
@@ -44,6 +45,8 @@ class Program {
     const cacheFile = 'gdrive.cache.json'
     const workerCount = 3
 
+    const usedPaths: string[] = []
+
     const backup = await GoogleDriveBackup.create(clientSecretFile, credentialsFile, cacheFile, workerCount)
     backup
       // SYNC
@@ -70,6 +73,13 @@ class Program {
           process.stdout.write('\n')
         }
       })
+      .onDownloadStarted((file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number) => {
+        this.printOutput(workerIndex, workerCount + 1, true, `Worker ${workerIndex + 1} - Started "${file.path}"`)
+        this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
+      })
+      .onPathInUse((path: string) => {
+        usedPaths.push(path)
+      })
       .onDownloadSkip((file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number) => {
         this.printOutput(workerIndex, workerCount + 1, true, `Worker ${workerIndex + 1} - Skipped "${file.path}"`)
         this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
@@ -95,9 +105,12 @@ class Program {
       })
 
     await backup.start(outputDir, this.command.cached)
+
+    const cleaner = new Cleaner(usedPaths)
+    await cleaner.cleanup(outputDir)
   }
 
-  protected printOutput(lineIndex: number, lineCount: number, overWritable: boolean, text: string) {
+  protected printOutput (lineIndex: number, lineCount: number, overWritable: boolean, text: string) {
     if (overWritable) {
       readline.cursorTo(process.stdout, 0)
       readline.moveCursor(process.stdout, 0, -(lineCount - 1 - lineIndex))

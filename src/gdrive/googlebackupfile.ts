@@ -64,6 +64,12 @@ export default class GoogleBackupFile {
 
         // Write stream
         const writeStream = fs.createWriteStream(this.outputFilePath)
+        writeStream.addListener('close', () => {
+          if (resolve) {
+            progressCallback(1, true)
+            resolve()
+          }
+        })
 
         let bytesProgress = 0
         response.data
@@ -73,12 +79,9 @@ export default class GoogleBackupFile {
               progressCallback(bytesProgress / this.driveFileSize, false)
             }
           })
-          .on('end', () => {
-            progressCallback(1, true)
-            resolve()
-          })
           .on('error', (err: Error) => {
             reject(err)
+            resolve = undefined
           })
           .pipe(writeStream)
       }

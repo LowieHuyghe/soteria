@@ -1,5 +1,5 @@
 import * as LineReader from 'line-reader'
-import * as fs from "fs"
+import * as fs from 'fs'
 
 export default class SimpleLineReader {
   private reader: LineReader | undefined
