@@ -1,10 +1,10 @@
 import * as commander from 'commander'
 import GoogleDriveFile from './gdrive/googledrivefile'
-import * as fs from 'fs'
 import * as readline from 'readline'
 import GoogleDriveBackup from './gdrive/googledrivebackup'
 import GoogleBackupFile from './gdrive/googlebackupfile'
 import Cleaner from './cleaner'
+import * as opn from 'opn'
 
 class Program {
   /**
@@ -48,7 +48,7 @@ class Program {
     const usedFilePaths: string[] = []
     const usedDirPaths: string[] = []
 
-    const backup = await GoogleDriveBackup.create(clientSecretFile, credentialsFile, cacheFile, workerCount)
+    const backup = await GoogleDriveBackup.create(clientSecretFile, credentialsFile, cacheFile, workerCount, this.authenticate)
     backup
       // SYNC
       .onSectionSyncStarted(() => {
@@ -173,6 +173,25 @@ class Program {
       readline.moveCursor(process.stdout, 0, lineCount - 1)
       process.stdout.write('\n')
     }
+  }
+
+  protected async authenticate (authUrl: string): Promise<string> {
+    process.stdout.write('Opening browser to authenticate Google Drive Service.\n')
+    await opn(authUrl)
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    })
+    return new Promise<string>((resolve, reject) => {
+      rl.question('Please paste the given code here: ', (code) => {
+        if (code) {
+          resolve(code)
+        } else {
+          reject(new Error('No valid code given'))
+        }
+      })
+    })
   }
 }
 

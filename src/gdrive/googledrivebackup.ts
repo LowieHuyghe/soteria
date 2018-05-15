@@ -30,8 +30,8 @@ export default class GoogleDriveBackup {
     this.workerCount = workerCount
   }
 
-  static async create (clientSecretPath: string, credentialsPath: string, cachePath: string, workerCount: number): Promise<GoogleDriveBackup> {
-    const service = new GoogleDriveService(clientSecretPath, credentialsPath)
+  static async create (clientSecretPath: string, credentialsPath: string, cachePath: string, workerCount: number, authenticate: (authUrl: string) => Promise<string>): Promise<GoogleDriveBackup> {
+    const service = new GoogleDriveService(clientSecretPath, credentialsPath, authenticate)
     return new GoogleDriveBackup(service, cachePath, workerCount)
   }
 
@@ -91,6 +91,8 @@ export default class GoogleDriveBackup {
   }
 
   async start (outputDir: string, fromCacheIfAvailable: boolean = false): Promise<number> {
+    await this.service.preloadAuth()
+
     if (!fromCacheIfAvailable || !fs.existsSync(this.cachePath)) {
       await this.sync()
     }
