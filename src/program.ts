@@ -45,13 +45,14 @@ class Program {
     const cacheFile = 'gdrive.cache.json'
     const workerCount = 3
 
-    const usedPaths: string[] = []
+    const usedFilePaths: string[] = []
+    const usedDirPaths: string[] = []
 
     const backup = await GoogleDriveBackup.create(clientSecretFile, credentialsFile, cacheFile, workerCount)
     backup
       // SYNC
       .onSectionSyncStarted(() => {
-        process.stdout.write('SYNCING\n')
+        this.printTitle('SYNCING')
         for (let i = 0; i < 1; ++i) {
           process.stdout.write('\n')
         }
@@ -68,17 +69,21 @@ class Program {
 
       // DOWNLOAD
       .onSectionDownloadStarted((totalFiles: number) => {
-        process.stdout.write('DOWNLOADING \n')
+        this.printTitle('DOWNLOADING')
         for (let i = 0; i < workerCount; ++i) {
           process.stdout.write('\n')
         }
       })
-      .onDownloadStarted((file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number) => {
+      .onDownloadInitializing((file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number) => {
         this.printOutput(workerIndex, workerCount + 1, true, `Worker ${workerIndex + 1} - Started "${file.path}"`)
         this.printOutput(workerCount, workerCount + 1, true, `Processed: ${processedFiles} / ${totalFiles}`)
       })
-      .onPathInUse((path: string) => {
-        usedPaths.push(path)
+      .onPathInUse((path: string, isDirectory: boolean) => {
+        if (isDirectory) {
+          usedDirPaths.push(path)
+        } else {
+          usedFilePaths.push(path)
+        }
       })
       .onDownloadSkip((file: GoogleDriveFile, processedFiles: number, totalFiles: number, workerIndex: number) => {
         this.printOutput(workerIndex, workerCount + 1, true, `Worker ${workerIndex + 1} - Skipped "${file.path}"`)
@@ -106,8 +111,47 @@ class Program {
 
     await backup.start(outputDir, this.command.cached)
 
-    const cleaner = new Cleaner(usedPaths)
+    const cleaner = new Cleaner(usedFilePaths, usedDirPaths)
+    cleaner
+      .onSectionSyncStarted(() => {
+        this.printTitle('INDEXING FOR CLEANUP')
+        for (let i = 0; i < 1; ++i) {
+          process.stdout.write('\n')
+        }
+      })
+      .onSyncFileFoundToDelete((path: string, totalFiles: number) => {
+        this.printOutput(0, 2, true, `Found file to delete "${path}"`)
+        this.printOutput(1, 2, true, `Indexed ${totalFiles} files`)
+      })
+      .onSectionSyncFinished((totalFiles: number) => {
+        this.printOutput(0, 2, true, `Done`)
+        this.printOutput(1, 2, true, `Finished indexing ${totalFiles} files`)
+        process.stdout.write('\n')
+      })
+      .onSectionDeleteStarted(() => {
+        this.printTitle('CLEANUP')
+        for (let i = 0; i < 1; ++i) {
+          process.stdout.write('\n')
+        }
+      })
+      .onDeleteProgress((path: string, processedFiles: number, totalFiles: number) => {
+        this.printOutput(0, 2, true, `Deleted "${path}"`)
+        this.printOutput(1, 2, true, `Deleted: ${processedFiles} / ${totalFiles}`)
+      })
+      .onSectionDeleteFinished((processedFiles: number, totalFiles: number) => {
+        this.printOutput(0, 2, true, 'Done')
+        this.printOutput(1, 2, true, `Finished deleting ${totalFiles} files`)
+        process.stdout.write('\n')
+      })
     await cleaner.cleanup(outputDir)
+  }
+
+  protected printTitle (title: string) {
+    process.stdout.write('\n')
+    process.stdout.write(`${'#'.repeat(2 + (3 * 2) + title.length)}\n`)
+    process.stdout.write(`#   ${title}   #\n`)
+    process.stdout.write(`${'#'.repeat(2 + (3 * 2) + title.length)}\n`)
+    process.stdout.write('\n')
   }
 
   protected printOutput (lineIndex: number, lineCount: number, overWritable: boolean, text: string) {

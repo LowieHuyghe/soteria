@@ -8,14 +8,14 @@ export default class Downloader {
     this.simultaneous = simultaneous
   }
 
-  start (): Promise<void[]> {
+  async start (): Promise<void> {
     const workers: Promise<void>[] = []
 
     for (let i = 0; i < this.simultaneous; ++i) {
       workers.push(this.getWorker(i))
     }
 
-    return Promise.all(workers)
+    await Promise.all(workers)
   }
 
   protected async getWorker (workerIndex: number): Promise<void> {
