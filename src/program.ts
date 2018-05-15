@@ -177,7 +177,7 @@ class Program {
 
   protected async authenticate (authUrl: string): Promise<string> {
     process.stdout.write('Opening browser to authenticate Google Drive Service.\n')
-    await opn(authUrl)
+    await opn(authUrl, { wait: false })
 
     const rl = readline.createInterface({
       input: process.stdin,
