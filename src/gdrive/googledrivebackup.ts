@@ -31,7 +31,7 @@ export default class GoogleDriveBackup {
   }
 
   static async create (clientSecretPath: string, credentialsPath: string, cachePath: string, workerCount: number): Promise<GoogleDriveBackup> {
-    const service = await GoogleDriveService.create(clientSecretPath, credentialsPath)
+    const service = new GoogleDriveService(clientSecretPath, credentialsPath)
     return new GoogleDriveBackup(service, cachePath, workerCount)
   }
 

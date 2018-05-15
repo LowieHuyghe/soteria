@@ -51,55 +51,33 @@ export default class GoogleBackupFile {
 
     progressCallback(0, false)
 
-    return new Promise<void>((resolve, reject) => {
-      const responseCallback = (err: any | undefined, response: any) => {
-        if (err) {
-          if (err.response) {
-            reject(new Error(`${err.response.status}: ${err.response.statusText}`))
-          } else {
-            reject(err)
-          }
-          return
-        }
+    const response = this.exportMimeType
+      ? await service.filesExport(this.driveFileId, this.exportMimeType)
+      : await service.filesGet(this.driveFileId)
 
-        // Write stream
-        const writeStream = fs.createWriteStream(this.outputFilePath)
-        writeStream.addListener('close', () => {
-          if (resolve) {
-            progressCallback(1, true)
-            resolve()
+    return new Promise<void>((resolve, reject) => {
+      // Write stream
+      const writeStream = fs.createWriteStream(this.outputFilePath)
+      writeStream.addListener('close', () => {
+        if (resolve) {
+          progressCallback(1, true)
+          resolve()
+        }
+      })
+
+      let bytesProgress = 0
+      response.data
+        .on('data', (data: any) => {
+          if (!this.exportMimeType && this.driveFileSize) {
+            bytesProgress += data.length
+            progressCallback(bytesProgress / this.driveFileSize, false)
           }
         })
-
-        let bytesProgress = 0
-        response.data
-          .on('data', (data: any) => {
-            if (!this.exportMimeType && this.driveFileSize) {
-              bytesProgress += data.length
-              progressCallback(bytesProgress / this.driveFileSize, false)
-            }
-          })
-          .on('error', (err: Error) => {
-            reject(err)
-            resolve = undefined
-          })
-          .pipe(writeStream)
-      }
-
-      // Request
-      if (!this.exportMimeType) {
-        service.drive.files.get(
-          { fileId: this.driveFileId, alt: 'media' },
-          { responseType: 'stream' },
-          responseCallback
-        )
-      } else {
-        service.drive.files.export(
-          { fileId: this.driveFileId, mimeType: this.exportMimeType },
-          { responseType: 'stream' },
-          responseCallback
-        )
-      }
+        .on('error', (err: Error) => {
+          reject(err)
+          resolve = undefined
+        })
+        .pipe(writeStream)
     })
   }
 }

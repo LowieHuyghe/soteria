@@ -23,99 +23,13 @@ export default class GoogleDriveService {
   protected static BATCH_SIZE = 100
   protected static SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
-  drive: any
-  auth: any
+  protected auth: any
+  protected clientSecretPath: string
+  protected credentialsPath: string
 
-  constructor (auth: any) {
-    this.auth = auth
-    this.drive = google.drive({
-      version: 'v3',
-      auth
-    })
-  }
-
-  static async create (clientSecretPath: string, credentialsPath: string) {
-    // Make oAuth client
-    let oAuth2Client = this.getOAuthClient(clientSecretPath)
-    oAuth2Client = await this.authenticateOAuthClient(oAuth2Client, credentialsPath)
-
-    return new GoogleDriveService(oAuth2Client)
-  }
-
-  protected static getOAuthClient (clientSecretPath: string): any {
-    // Read the client secret
-    const clientSecretContents = fs.readFileSync(clientSecretPath).toString()
-    const clientSecretJson = JSON.parse(clientSecretContents)
-    const {
-      client_secret,
-      client_id,
-      redirect_uris
-    } = clientSecretJson.installed
-
-    // Make oAuth client
-    return new google.auth.OAuth2(client_id, client_secret, redirect_uris[0])
-  }
-
-  protected static async authenticateOAuthClient (oAuth2Client: any, credentialsPath: string): Promise<any> {
-    // Use the existing credentials to log in
-    if (fs.existsSync(credentialsPath)) {
-      const existingCredentialsContents = fs.readFileSync(credentialsPath).toString()
-      const existingCredentials = JSON.parse(existingCredentialsContents)
-      oAuth2Client.setCredentials(existingCredentials)
-
-      // Not expired, so log in
-      if (Date.now() < existingCredentials.expiry_date) {
-        return oAuth2Client
-      }
-
-      // Refresh token
-      if (existingCredentials.refresh_token) {
-        const refreshResponse = await oAuth2Client.refreshAccessToken()
-        if (refreshResponse && refreshResponse.credentials) {
-          const refreshedCredentials = {
-            ...existingCredentials,
-            ...refreshResponse.credentials
-          }
-          oAuth2Client.setCredentials(refreshedCredentials)
-
-          // Store the credentials to disk for later program executions
-          fs.writeFileSync(credentialsPath, JSON.stringify(refreshedCredentials))
-          return oAuth2Client
-        }
-      }
-    }
-
-    // Try logging in
-    const authUrl = oAuth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: GoogleDriveService.SCOPES
-    })
-
-    return new Promise((resolve, reject) => {
-      // Open an http server to accept the oauth callback. In this simple example, the
-      // only request to our webserver is to /oauth2callback?code=<code>
-      const server = http.createServer(async (req, res) => {
-        if (req.url.indexOf('/oauth2callback') > -1) {
-          // acquire the code from the querystring, and close the web server.
-          const qs = querystring.parse(url.parse(req.url).query)
-          console.log(`Code is ${qs.code}`)
-          res.end('Authentication successful! Please return to the console.')
-          server.close()
-
-          // Now that we have the code, use that to acquire tokens.
-          const getTokenResponse = await oAuth2Client.getToken(qs.code)
-          oAuth2Client.setCredentials(getTokenResponse.tokens)
-
-          // Store the credentials to disk for later program executions
-          fs.writeFileSync(credentialsPath, JSON.stringify(getTokenResponse.tokens))
-
-          resolve(oAuth2Client)
-        }
-      }).listen(3000, () => {
-        // open the browser to the authorize url to start the workflow
-        opn(authUrl)
-      })
-    })
+  constructor (clientSecretPath: string, credentialsPath: string) {
+    this.clientSecretPath = clientSecretPath
+    this.credentialsPath = credentialsPath
   }
 
   async * walk (givenWalkItems: WalkItem[] = [{ parent: undefined, nextPageToken: undefined, retry: 0 }]): any {
@@ -136,14 +50,48 @@ export default class GoogleDriveService {
     }
   }
 
+  async filesGet (fileId: string): Promise<any> {
+    const drive = await this.getDrive()
+    return new Promise<any>((resolve, reject) => {
+      drive.files.get(
+        { fileId, alt: 'media' },
+        { responseType: 'stream' },
+        (err: any, response: any) => {
+          if (err) {
+            reject(this.handleError(err))
+          } else {
+            resolve(response)
+          }
+        }
+      )
+    })
+  }
+
+  async filesExport (fileId: string, mimeType: string): Promise<any> {
+    const drive = await this.getDrive()
+    return new Promise<any>((resolve, reject) => {
+      drive.files.export(
+        { fileId, mimeType },
+        { responseType: 'stream' },
+        (err: any, response: any) => {
+          if (err) {
+            reject(this.handleError(err))
+          } else {
+            resolve(response)
+          }
+        }
+      )
+    })
+  }
+
   protected fetchItems (batchItems: WalkItem[], uniqueNames: any, delay = 0): Promise<FetchItemsResult> {
     return new Promise((resolve, reject) => {
-      setTimeout(() => {
+      setTimeout(async () => {
         const batch = new Batchelor({
           uri: 'https://www.googleapis.com/batch',
           method: 'POST',
           auth: {
-            bearer: this.auth.credentials.access_token
+            bearer: (await this.getAuth()).credentials.access_token
           },
           headers: {
             'Content-Type': 'multipart/mixed'
@@ -187,6 +135,7 @@ export default class GoogleDriveService {
 
             if (result.body && result.body.error) {
               switch (result.body.error.code) {
+                case 401:
                 case 403:
                 case 429:
                 case 500:
@@ -249,5 +198,114 @@ export default class GoogleDriveService {
         })
       }, delay)
     })
+  }
+
+  protected handleError (err: any): Error {
+    if (err.response) {
+      return new Error(`${err.response.status}: ${err.response.statusText}`)
+    }
+    return err
+  }
+
+  protected async getAuth (): Promise<any> {
+    if (!this.auth) {
+      this.auth = this.createOAuthClient()
+      await this.authenticateOAuthClient(this.auth)
+    } else {
+      const stillValid = await this.checkOAuthClient(this.auth)
+      if (!stillValid) {
+        throw new Error('Could not authenticate the oAuthClient')
+      }
+    }
+    return this.auth
+  }
+
+  protected async getDrive (): Promise<any> {
+    return google.drive({
+      version: 'v3',
+      auth: await this.getAuth()
+    })
+  }
+
+  protected createOAuthClient (): any {
+    // Read the client secret
+    const clientSecretContents = fs.readFileSync(this.clientSecretPath).toString()
+    const clientSecretJson = JSON.parse(clientSecretContents)
+    const {
+      client_secret,
+      client_id,
+      redirect_uris
+    } = clientSecretJson.installed
+
+    // Make oAuth client
+    return new google.auth.OAuth2(client_id, client_secret, redirect_uris[0])
+  }
+
+  protected async authenticateOAuthClient (oAuthClient: any): Promise<void> {
+    // Use the existing credentials to log in
+    if (fs.existsSync(this.credentialsPath)) {
+      const existingCredentialsContents = fs.readFileSync(this.credentialsPath).toString()
+      const existingCredentials = JSON.parse(existingCredentialsContents)
+      oAuthClient.setCredentials(existingCredentials)
+
+      const stillValid = await this.checkOAuthClient(oAuthClient)
+      if (stillValid) {
+        return
+      }
+    }
+
+    // Try logging in
+    const authUrl = oAuthClient.generateAuthUrl({
+      access_type: 'offline',
+      scope: GoogleDriveService.SCOPES
+    })
+
+    return new Promise<void>((resolve, reject) => {
+      // Open an http server to accept the oauth callback. In this simple example, the
+      // only request to our webserver is to /oauth2callback?code=<code>
+      const server = http.createServer(async (req, res) => {
+        if (req.url.indexOf('/oauth2callback') > -1) {
+          // acquire the code from the querystring, and close the web server.
+          const qs = querystring.parse(url.parse(req.url).query)
+          console.log(`Code is ${qs.code}`)
+          res.end('Authentication successful! Please return to the console.')
+          server.close()
+
+          // Now that we have the code, use that to acquire tokens.
+          const getTokenResponse = await oAuthClient.getToken(qs.code)
+          oAuthClient.setCredentials(getTokenResponse.tokens)
+
+          // Store the credentials to disk for later program executions
+          fs.writeFileSync(this.credentialsPath, JSON.stringify(getTokenResponse.tokens))
+
+          resolve()
+        }
+      }).listen(3000, () => {
+        // open the browser to the authorize url to start the workflow
+        opn(authUrl)
+      })
+    })
+  }
+
+  protected async checkOAuthClient (oAuthClient: any): Promise<boolean> {
+    if (Date.now() < oAuthClient.credentials.expiry_date) {
+      return true
+    }
+
+    const refreshResponse = await oAuthClient.refreshAccessToken()
+    if (!refreshResponse || !refreshResponse.credentials) {
+      return false
+    }
+
+    const refreshedCredentials = {
+      ...oAuthClient.credentials,
+      ...refreshResponse.credentials
+    }
+    oAuthClient.setCredentials(refreshedCredentials)
+
+    // Store the credentials to disk for later program executions
+    fs.writeFileSync(this.credentialsPath, JSON.stringify(refreshedCredentials))
+
+    return true
   }
 }
