@@ -32,7 +32,7 @@ class Program {
   async run (argv: string[]): Promise<void> {
     this.command.parse(argv)
 
-    if (this.command.output) {
+    if (this.command.output && typeof this.command.output === 'string') {
       await this.action(this.command.output)
     } else {
       this.command.outputHelp()
