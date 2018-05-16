@@ -20,19 +20,24 @@ class Program {
     this.command = command
       .name('Google Drive Backup Tool')
       .version('0.1.0')
-      .usage('[options] <output_dir>')
-      .option('-f, --force', 'Do not ask for confirmation')
+      .usage('--output <outputDir> [options]')
+      .option('-o, --output', 'Output directory')
       .option('-c, --cached', 'Use cached sync')
-      .option('-d, --delete', 'Delete local files and directories that do not exist on drive anymore')
-      .action(this.action.bind(this))
   }
 
   /**
    * Run the program
    * @param {string[]} argv
    */
-  run (argv: string[]): void {
+  async run (argv: string[]): Promise<void> {
     this.command.parse(argv)
+
+    if (this.command.output) {
+      await this.action(this.command.output)
+    } else {
+      this.command.outputHelp()
+      process.exit(1)
+    }
   }
 
   /**
@@ -195,4 +200,8 @@ class Program {
   }
 }
 
-new Program(commander).run(process.argv)
+new Program(commander)
+  .run(process.argv)
+  .catch((err) => {
+    console.error(err)
+  })
