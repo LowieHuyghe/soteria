@@ -21,7 +21,7 @@ class Program {
       .name('Google Drive Backup Tool')
       .version('0.1.0')
       .usage('--output <outputDir> [options]')
-      .option('-o, --output', 'Output directory')
+      .option('-o, --output [outputDir]', 'Output directory')
       .option('-c, --cached', 'Use cached sync')
   }
 
