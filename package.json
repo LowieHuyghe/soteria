@@ -31,7 +31,7 @@
   },
   "homepage": "https://github.com/LowieHuyghe/google-drive-backup-tool#README",
   "dependencies": {
-    "async": "^2.6.0",
+    "async": "^2.6.1",
     "batchelor": "^2.0.2",
     "commander": "^2.14.1",
     "config": "^1.29.4",
