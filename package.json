@@ -36,13 +36,13 @@
     "commander": "^2.14.1",
     "config": "^1.29.4",
     "googleapis": "^31.0.2",
-    "inquirer": "^5.1.0",
+    "inquirer": "^6.0.0",
     "line-reader": "^0.4.0",
     "md5-file": "^4.0.0",
     "mkdirp": "^0.5.1",
     "opn": "^5.3.0",
     "sanitize-filename": "^1.6.1",
-    "simple-git": "^1.95.0"
+    "simple-git": "^1.95.1"
   },
   "devDependencies": {
     "@types/chai": "^4.1.2",
@@ -51,17 +51,17 @@
     "@types/line-reader": "0.0.28",
     "@types/mkdirp": "^0.5.2",
     "@types/mocha": "^5.2.1",
-    "@types/node": "^10.1.4",
+    "@types/node": "^10.3.1",
     "@types/sanitize-filename": "^1.1.28",
     "chai": "^4.1.2",
     "codecov": "^3.0.2",
     "mocha": "^5.2.0",
     "nodemon": "^1.17.5",
-    "nyc": "^11.8.0",
+    "nyc": "^12.0.2",
     "source-map-support": "^0.5.6",
     "ts-node": "^6.0.5",
     "tslint": "^5.10.0",
     "tslint-config-standard": "^7.0.0",
-    "typescript": "^2.8.4"
+    "typescript": "^2.9.1"
   }
 }
