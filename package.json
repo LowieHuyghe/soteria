@@ -50,7 +50,7 @@
     "@types/inquirer": "0.0.41",
     "@types/line-reader": "0.0.28",
     "@types/mkdirp": "^0.5.2",
-    "@types/mocha": "^5.1.0",
+    "@types/mocha": "^5.2.1",
     "@types/node": "^10.3.1",
     "@types/sanitize-filename": "^1.1.28",
     "chai": "^4.1.2",
