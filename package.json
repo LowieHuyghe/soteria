@@ -45,7 +45,7 @@
     "simple-git": "^1.95.1"
   },
   "devDependencies": {
-    "@types/chai": "^4.1.2",
+    "@types/chai": "^4.1.4",
     "@types/config": "0.0.34",
     "@types/inquirer": "0.0.41",
     "@types/line-reader": "0.0.28",
@@ -61,7 +61,7 @@
     "source-map-support": "^0.5.6",
     "ts-node": "^6.1.0",
     "tslint": "^5.10.0",
-    "tslint-config-standard": "^7.0.0",
+    "tslint-config-standard": "^7.1.0",
     "typescript": "^2.9.1"
   }
 }
