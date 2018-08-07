@@ -1,6 +1,7 @@
 import * as commander from 'commander'
 import GoogleDriveFile from './gdrive/googledrivefile'
 import * as readline from 'readline'
+import * as path from 'path'
 import GoogleDriveBackup from './gdrive/googledrivebackup'
 import GoogleBackupFile from './gdrive/googlebackupfile'
 import Cleaner from './cleaner'
@@ -11,18 +12,25 @@ class Program {
    * Command
    */
   private command: commander.Command
+  /**
+   * Root directory
+   */
+  private root: string
 
   /**
    * Constructor
    * @param {commander.Command} command
+   * @param {string} root
    */
-  constructor (command: commander.Command) {
+  constructor (command: commander.Command, root: string) {
     this.command = command
       .name('Google Drive Backup Tool')
       .version('0.1.0')
       .usage('--output <outputDir> [options]')
       .option('-o, --output [outputDir]', 'Output directory')
+      .option('-w, --workers [workerCount]', 'Number of workers', 3)
       .option('-c, --cached', 'Use cached sync')
+    this.root = root
   }
 
   /**
@@ -33,7 +41,7 @@ class Program {
     this.command.parse(argv)
 
     if (this.command.output && typeof this.command.output === 'string') {
-      await this.action(this.command.output)
+      await this.action(this.command.output, this.command.workers)
     } else {
       this.command.outputHelp()
       process.exit(1)
@@ -42,13 +50,16 @@ class Program {
 
   /**
    * Action
-   * @param {string} outputDir
+   * @param {string} givenOutputDir
+   * @param {number} workerCount
    */
-  protected async action (outputDir: string) {
-    const clientSecretFile = 'googleapi.clientsecret.json'
-    const credentialsFile = 'googleapi.credentials.json'
-    const cacheFile = 'gdrive.cache.json'
-    const workerCount = 3
+  protected async action (givenOutputDir: string, workerCount: number) {
+    const outputDir = path.isAbsolute(givenOutputDir)
+      ? givenOutputDir  // absolute path
+      : path.join(process.cwd(), givenOutputDir)  // relative path
+    const clientSecretFile = path.join(this.root, 'googleapi.clientsecret.json')
+    const credentialsFile = path.join(this.root, 'googleapi.credentials.json')
+    const cacheFile = path.join(this.root, 'gdrive.cache.json')
 
     const usedFilePaths: string[] = []
     const usedDirPaths: string[] = []
@@ -200,7 +211,7 @@ class Program {
   }
 }
 
-new Program(commander)
+new Program(commander, path.join(__dirname, '..'))
   .run(process.argv)
   .catch((err) => {
     console.error(err)
