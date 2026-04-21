@@ -47,7 +47,7 @@
   "devDependencies": {
     "@types/chai": "^4.1.4",
     "@types/config": "0.0.34",
-    "@types/inquirer": "0.0.41",
+    "@types/inquirer": "0.0.44",
     "@types/line-reader": "0.0.28",
     "@types/mkdirp": "^0.5.2",
     "@types/mocha": "^5.2.1",
