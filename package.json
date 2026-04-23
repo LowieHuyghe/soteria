@@ -33,7 +33,7 @@
   "dependencies": {
     "async": "^2.6.1",
     "batchelor": "^2.0.2",
-    "commander": "^2.14.1",
+    "commander": "^2.19.0",
     "config": "^1.29.4",
     "googleapis": "^31.0.2",
     "inquirer": "^6.0.0",
